@@ -385,6 +385,104 @@ impl Vietnamese {
         }
         ProcessResult::Consumed
     }
+
+    /// Convert a VNI string to Vietnamese
+    ///
+    /// VNI rules:
+    /// - Vowel mods: a8→ă, a6→â, o7→ơ, o6→ô, u7→ư, d9→đ, e6→ê
+    /// - Tone marks (at end): 1→sắc, 2→huyền, 3→hỏi, 4→ngã, 5→nặng
+    pub fn convert_vni(&self, input: &str) -> String {
+        let mut result = String::with_capacity(input.len());
+        let input_chars: Vec<char> = input.chars().collect();
+        let mut i = 0;
+
+        // First pass: Process vowel modifications and collect chars
+        let mut chars: Vec<CharInfo> = Vec::new();
+        let mut pending_tone: Option<ToneMark> = None;
+
+        while i < input_chars.len() {
+            let c = input_chars[i];
+
+            // Check for VNI vowel modification (vowel + number)
+            if i + 1 < input_chars.len() {
+                let next = input_chars[i + 1];
+                let vowel_mod = match (c, next) {
+                    ('a', '8') => Some(('ă', VowelMod::Breve)),
+                    ('a', '6') => Some(('â', VowelMod::Circumflex)),
+                    ('o', '7') => Some(('ơ', VowelMod::Horn)),
+                    ('o', '6') => Some(('ô', VowelMod::Circumflex)),
+                    ('u', '7') => Some(('ư', VowelMod::Horn)),
+                    ('d', '9') => Some(('đ', VowelMod::None)),
+                    ('e', '6') => Some(('ê', VowelMod::Circumflex)),
+                    _ => None,
+                };
+
+                if let Some((ch, vm)) = vowel_mod {
+                    let mut info = CharInfo::new(ch);
+                    info.vowel_mod = vm;
+                    chars.push(info);
+                    i += 2;
+                    continue;
+                }
+            }
+
+            // Check for VNI tone mark (1-5)
+            // In VNI, tone marks always come at the end of syllable
+            let tone = match c {
+                '1' => Some(ToneMark::Acute),      // sắc
+                '2' => Some(ToneMark::Grave),      // huyền
+                '3' => Some(ToneMark::HookAbove),  // hỏi
+                '4' => Some(ToneMark::Tilde),      // ngã
+                '5' => Some(ToneMark::DotBelow),   // nặng
+                _ => None,
+            };
+
+            if let Some(t) = tone {
+                // In VNI, tone marks override any previous tone
+                pending_tone = Some(t);
+                i += 1;
+                continue;
+            }
+
+            // Regular character
+            chars.push(CharInfo::new(c));
+            i += 1;
+        }
+
+        // Second pass: Apply tone marks
+        // VNI always applies tone to the first vowel in the sequence
+        let tone_to_apply: Option<ToneMark> = pending_tone;
+
+        let tone_pos = if tone_to_apply.is_some() {
+            CharInfo::find_tone_position(&chars)
+        } else {
+            None
+        };
+
+        for (i, ch) in chars.iter().enumerate() {
+            let has_tone = tone_pos == Some(i);
+
+            let ch_with_tone = if has_tone {
+                let tone = tone_to_apply.unwrap();
+                ch.with_tone(tone)
+            } else {
+                ch.with_tone(ToneMark::None)
+            };
+
+            result.push(ch_with_tone);
+        }
+
+        result
+    }
+
+    /// Process VNI input keystroke by keystroke
+    fn process_vni(&self, keystroke: &Keystroke, buffer: &str) -> ProcessResult {
+        if let Keystroke { key: Key::Char(c), .. } = keystroke {
+            let result = self.convert_vni(&format!("{}{}", buffer, c));
+            return ProcessResult::ReadyToCommit(result);
+        }
+        ProcessResult::Consumed
+    }
 }
 
 impl Default for Vietnamese {
@@ -397,10 +495,7 @@ impl LanguagePack for Vietnamese {
     fn process(&self, keystroke: &Keystroke, buffer: &str) -> ProcessResult {
         match self.method {
             InputMethod::Telex => self.process_telex(keystroke, buffer),
-            InputMethod::VNI => {
-                // TODO: Implement VNI (issue #2)
-                ProcessResult::Consumed
-            }
+            InputMethod::VNI => self.process_vni(keystroke, buffer),
         }
     }
 
@@ -546,5 +641,74 @@ mod tests {
         assert!(vi.is_valid_composition("xin chào"));
         assert!(vi.is_valid_composition("ăâêôơưđ"));
         assert!(!vi.is_valid_composition("hello@"));
+    }
+
+    // VNI tests
+    #[test]
+    fn test_vni_vowel_modifications() {
+        let vi = Vietnamese::with_method(InputMethod::VNI);
+
+        assert_eq!(vi.convert_vni("a8"), "ă");
+        assert_eq!(vi.convert_vni("a6"), "â");
+        assert_eq!(vi.convert_vni("o7"), "ơ");
+        assert_eq!(vi.convert_vni("o6"), "ô");
+        assert_eq!(vi.convert_vni("u7"), "ư");
+        assert_eq!(vi.convert_vni("d9"), "đ");
+        assert_eq!(vi.convert_vni("e6"), "ê");
+    }
+
+    #[test]
+    fn test_vni_tone_marks_basic() {
+        let vi = Vietnamese::with_method(InputMethod::VNI);
+
+        // Basic vowels with tones (1=sắc, 2=huyền, 3=hỏi, 4=ngã, 5=nặng)
+        assert_eq!(vi.convert_vni("a1"), "á");
+        assert_eq!(vi.convert_vni("a2"), "à");
+        assert_eq!(vi.convert_vni("a3"), "ả");
+        assert_eq!(vi.convert_vni("a4"), "ã");
+        assert_eq!(vi.convert_vni("a5"), "ạ");
+
+        assert_eq!(vi.convert_vni("e1"), "é");
+        assert_eq!(vi.convert_vni("i1"), "í");
+        assert_eq!(vi.convert_vni("o1"), "ó");
+        assert_eq!(vi.convert_vni("u1"), "ú");
+        assert_eq!(vi.convert_vni("y1"), "ý");
+    }
+
+    #[test]
+    fn test_vni_vowel_with_tone() {
+        let vi = Vietnamese::with_method(InputMethod::VNI);
+
+        // ă with tones
+        assert_eq!(vi.convert_vni("a81"), "ắ");
+        assert_eq!(vi.convert_vni("a82"), "ằ");
+        assert_eq!(vi.convert_vni("a83"), "ẳ");
+
+        // â with tones
+        assert_eq!(vi.convert_vni("a61"), "ấ");
+        assert_eq!(vi.convert_vni("a62"), "ầ");
+
+        // ê with tones
+        assert_eq!(vi.convert_vni("e61"), "ế");
+
+        // ô with tones
+        assert_eq!(vi.convert_vni("o61"), "ố");
+
+        // ơ with tones
+        assert_eq!(vi.convert_vni("o71"), "ớ");
+
+        // ư with tones
+        assert_eq!(vi.convert_vni("u71"), "ứ");
+    }
+
+    #[test]
+    fn test_vni_word_examples() {
+        let vi = Vietnamese::with_method(InputMethod::VNI);
+
+        assert_eq!(vi.convert_vni("xin"), "xin");
+        assert_eq!(vi.convert_vni("chao"), "chao");
+        assert_eq!(vi.convert_vni("chao1"), "cháo");
+        assert_eq!(vi.convert_vni("chao2"), "chào");
+        assert_eq!(vi.convert_vni("u71n"), "ứn");
     }
 }
