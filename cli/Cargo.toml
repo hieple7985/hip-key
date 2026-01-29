@@ -1,0 +1,15 @@
+[package]
+name = "hip-key-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "hip-key"
+path = "src/main.rs"
+
+[dependencies]
+hip-key-core = { path = "../core" }
+hip-key-lang-vi = { path = "../lang/vi" }
