@@ -39,6 +39,12 @@ impl Buffer {
         &self.composing
     }
 
+    /// Set composing text directly
+    pub fn set_composing(&mut self, text: &str) {
+        self.composing = text.to_string();
+        self.cursor = self.composing.len();
+    }
+
     /// Get cursor position in composing text
     pub fn cursor(&self) -> usize {
         self.cursor

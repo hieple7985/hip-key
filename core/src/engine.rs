@@ -59,9 +59,13 @@ impl Engine {
             let result = pack.process(keystroke, self.buffer.composing());
 
             match result {
+                ProcessResult::BufferUpdated(new_buffer) => {
+                    // Language pack provided new buffer content
+                    self.buffer.set_composing(&new_buffer);
+                    EngineEvent::BufferChanged
+                }
                 ProcessResult::Consumed => {
-                    // Language pack handled it, buffer should be updated
-                    // For now, simple append for char keys
+                    // Language pack handled it, append the keystroke
                     if let crate::keystroke::Key::Char(c) = keystroke.key {
                         self.buffer.append(c);
                     }
@@ -223,5 +227,47 @@ mod tests {
 
         engine.clear();
         assert!(engine.is_idle());
+    }
+
+    #[test]
+    fn test_engine_keystroke_by_keystroke() {
+        // Test that engine processes keystrokes correctly
+        let mut engine = Engine::new();
+
+        // No language pack - pass through
+        let event = engine.process(&Keystroke::char('a'));
+        assert_eq!(event, EngineEvent::PassThrough);
+        assert_eq!(engine.buffer().composing(), "");
+
+        // With language pack - characters append
+        engine.set_language_pack(Box::new(TestLanguagePack));
+        let _ = engine.process(&Keystroke::char('x'));
+        assert_eq!(engine.buffer().composing(), "x");
+        let _ = engine.process(&Keystroke::char('i'));
+        assert_eq!(engine.buffer().composing(), "xi");
+        let _ = engine.process(&Keystroke::char('n'));
+        assert_eq!(engine.buffer().composing(), "xin");
+    }
+
+    #[test]
+    fn test_engine_backspace_with_buffer() {
+        let mut engine = Engine::new();
+        engine.set_language_pack(Box::new(TestLanguagePack));
+
+        // Type "abc"
+        let _ = engine.process(&Keystroke::char('a'));
+        let _ = engine.process(&Keystroke::char('b'));
+        let _ = engine.process(&Keystroke::char('c'));
+        assert_eq!(engine.buffer().composing(), "abc");
+
+        // Backspace twice
+        let _ = engine.process(&Keystroke::backspace());
+        assert_eq!(engine.buffer().composing(), "ab");
+        let _ = engine.process(&Keystroke::backspace());
+        assert_eq!(engine.buffer().composing(), "a");
+
+        // Type again
+        let _ = engine.process(&Keystroke::char('b'));
+        assert_eq!(engine.buffer().composing(), "ab");
     }
 }

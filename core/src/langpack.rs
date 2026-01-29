@@ -15,6 +15,8 @@ pub enum ProcessResult {
     Consumed,
     /// Keystroke not handled, should pass through
     PassThrough,
+    /// Buffer content updated (language pack provides new buffer content)
+    BufferUpdated(String),
     /// Candidate list updated
     Candidates(CandidateList),
     /// Composition ready to commit

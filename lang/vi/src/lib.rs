@@ -378,15 +378,78 @@ impl Vietnamese {
     /// Process Telex input keystroke by keystroke
     fn process_telex(&self, keystroke: &Keystroke, buffer: &str) -> ProcessResult {
         if let Keystroke { key: Key::Char(c), .. } = keystroke {
-            // For now, use the simpler direct conversion
-            // TODO: Implement proper stateful processing for issue #3
-            let result = self.convert_telex(&format!("{}{}", buffer, c));
-            return ProcessResult::ReadyToCommit(result);
+            // Check for terminating characters (commit)
+            if c.is_ascii_whitespace() || c.is_ascii_punctuation() {
+                // Commit current buffer
+                return ProcessResult::ReadyToCommit(buffer.to_string());
+            }
+
+            let buffer_chars: Vec<char> = buffer.chars().collect();
+            let last_char = buffer_chars.last().copied();
+
+            // Check for Telex vowel modification (last char + current)
+            if let Some(last) = last_char {
+                let vowel_mod = match (last, c) {
+                    ('a', 'w') => Some('ă'),
+                    ('a', 'a') => Some('â'),
+                    ('o', 'w') => Some('ơ'),
+                    ('o', 'o') => Some('ô'),
+                    ('u', 'w') => Some('ư'),
+                    ('d', 'd') => Some('đ'),
+                    ('e', 'e') => Some('ê'),
+                    _ => None,
+                };
+
+                if let Some(replaced) = vowel_mod {
+                    // Replace last char with modified vowel
+                    let new_buffer: String = buffer_chars[..buffer_chars.len()-1].iter().collect();
+                    return ProcessResult::BufferUpdated(format!("{}{}", new_buffer, replaced));
+                }
+            }
+
+            // Check for tone mark (s, f, j, r, x)
+            let tone = match c {
+                's' => Some(ToneMark::Acute),      // sắc
+                'f' => Some(ToneMark::Grave),      // huyền
+                'j' => Some(ToneMark::HookAbove),  // hỏi
+                'r' => Some(ToneMark::DotBelow),   // nặng
+                'x' | 'z' => Some(ToneMark::None),   // remove tone
+                _ => None,
+            };
+
+            if let Some(tone_mark) = tone {
+                // Find the vowel to apply tone to
+                // Priority: ă > â > ê > ô > ơ > ư > a > e > i > o > u > y
+                let mut chars: Vec<CharInfo> = buffer_chars.iter().map(|&ch| CharInfo::new(ch)).collect();
+
+                if let Some(tone_pos) = CharInfo::find_tone_position(&chars) {
+                    // Apply tone to the character at tone_pos
+                    let target = &chars[tone_pos];
+                    let with_tone = target.with_tone(tone_mark);
+
+                    // Rebuild buffer with toned character
+                    let mut new_buffer = String::new();
+                    for (i, ch) in chars.iter().enumerate() {
+                        if i == tone_pos {
+                            new_buffer.push(with_tone);
+                        } else {
+                            new_buffer.push(ch.base);
+                        }
+                    }
+                    return ProcessResult::BufferUpdated(new_buffer);
+                }
+                // No vowel found to apply tone - treat as regular character
+            }
+
+            // No special handling - append the character
+            ProcessResult::Consumed
+        } else {
+            // Non-character keystroke (backspace, etc.)
+            ProcessResult::PassThrough
         }
-        ProcessResult::Consumed
     }
 
-    /// Convert a VNI string to Vietnamese
+    /// Convert a Telex string to Vietnamese
     ///
     /// VNI rules:
     /// - Vowel mods: a8→ă, a6→â, o7→ơ, o6→ô, u7→ư, d9→đ, e6→ê
@@ -478,10 +541,74 @@ impl Vietnamese {
     /// Process VNI input keystroke by keystroke
     fn process_vni(&self, keystroke: &Keystroke, buffer: &str) -> ProcessResult {
         if let Keystroke { key: Key::Char(c), .. } = keystroke {
-            let result = self.convert_vni(&format!("{}{}", buffer, c));
-            return ProcessResult::ReadyToCommit(result);
+            // Check for terminating characters (commit)
+            if c.is_ascii_whitespace() || c.is_ascii_punctuation() {
+                // Commit current buffer
+                return ProcessResult::ReadyToCommit(buffer.to_string());
+            }
+
+            let buffer_chars: Vec<char> = buffer.chars().collect();
+
+            // Check for VNI tone mark (1-5)
+            let tone = match c {
+                '1' => Some(ToneMark::Acute),      // sắc
+                '2' => Some(ToneMark::Grave),      // huyền
+                '3' => Some(ToneMark::HookAbove),  // hỏi
+                '4' => Some(ToneMark::Tilde),      // ngã
+                '5' => Some(ToneMark::DotBelow),   // nặng
+                _ => None,
+            };
+
+            if let Some(tone_mark) = tone {
+                // Apply tone to first vowel
+                let chars: Vec<CharInfo> = buffer_chars.iter().map(|&ch| CharInfo::new(ch)).collect();
+
+                if let Some(tone_pos) = CharInfo::find_tone_position(&chars) {
+                    // Apply tone to the character at tone_pos
+                    let target = &chars[tone_pos];
+                    let with_tone = target.with_tone(tone_mark);
+
+                    // Rebuild buffer with toned character
+                    let mut new_buffer = String::new();
+                    for (i, ch) in chars.iter().enumerate() {
+                        if i == tone_pos {
+                            new_buffer.push(with_tone);
+                        } else {
+                            new_buffer.push(ch.base);
+                        }
+                    }
+                    return ProcessResult::BufferUpdated(new_buffer);
+                }
+                // No vowel found - treat as regular character
+            }
+
+            // Check for VNI vowel modification (last char + current)
+            let last_char = buffer_chars.last().copied();
+            if let Some(last) = last_char {
+                let vowel_mod = match (last, c) {
+                    ('a', '8') => Some('ă'),
+                    ('a', '6') => Some('â'),
+                    ('o', '7') => Some('ơ'),
+                    ('o', '6') => Some('ô'),
+                    ('u', '7') => Some('ư'),
+                    ('d', '9') => Some('đ'),
+                    ('e', '6') => Some('ê'),
+                    _ => None,
+                };
+
+                if let Some(replaced) = vowel_mod {
+                    // Replace last char with modified vowel
+                    let new_buffer: String = buffer_chars[..buffer_chars.len()-1].iter().collect();
+                    return ProcessResult::BufferUpdated(format!("{}{}", new_buffer, replaced));
+                }
+            }
+
+            // No special handling - append the character
+            ProcessResult::Consumed
+        } else {
+            // Non-character keystroke (backspace, etc.)
+            ProcessResult::PassThrough
         }
-        ProcessResult::Consumed
     }
 }
 
