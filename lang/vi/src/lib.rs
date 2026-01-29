@@ -2,77 +2,99 @@
 //!
 //! Input methods: Telex, VNI (extensible)
 
-use hip_key_core::{Keystroke, LanguagePack, ProcessResult, CandidateList, Key};
+use hip_key_core::{CandidateList, Key, Keystroke, LanguagePack, ProcessResult};
 
 /// Vietnamese input method type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InputMethod {
     /// Telex input (e.g., aw -> ă, aa -> â)
+    #[default]
     Telex,
     /// VNI input (e.g., a8 -> ă, a6 -> â)
     VNI,
 }
-
-impl Default for InputMethod {
-    fn default() -> Self {
-        Self::Telex
-    }
-}
-
 /// Tone mark in Vietnamese
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ToneMark {
-    None,       // no tone (a)
-    Acute,      // sắc (á)
-    Grave,      // huyền (à)
-    HookAbove,  // hỏi (ả)
-    Tilde,      // ngã (ã)
-    DotBelow,   // nặng (ạ)
+    None,      // no tone (a)
+    Acute,     // sắc (á)
+    Grave,     // huyền (à)
+    HookAbove, // hỏi (ả)
+    Tilde,     // ngã (ã)
+    DotBelow,  // nặng (ạ)
 }
 
 /// Vowel with modification (breve, circumflex, horn)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VowelMod {
     None,
-    Breve,     // ă (from aw)
+    Breve,      // ă (from aw)
     Circumflex, // â, ê, ô (from aa, ee, oo)
-    Horn,      // ơ, ư (from ow, uw)
+    Horn,       // ơ, ư (from ow, uw)
 }
 
 /// Character info for tone placement
 struct CharInfo {
     base: char,
     vowel_mod: VowelMod,
-    can_take_tone: bool,  // true for vowels, false for consonants
+    can_take_tone: bool, // true for vowels, false for consonants
 }
 
 impl CharInfo {
     fn new(c: char) -> Self {
         let (base, vowel_mod) = Self::parse_vowel(c);
         let can_take_tone = Self::is_vowel(base);
-        Self { base, vowel_mod, can_take_tone }
+        Self {
+            base,
+            vowel_mod,
+            can_take_tone,
+        }
     }
 
     fn parse_vowel(c: char) -> (char, VowelMod) {
         match c {
             // Breve vowels
-            'ă' | 'Ă' | 'ắ' | 'Ắ' | 'ằ' | 'Ằ' | 'ẳ' | 'Ẳ' | 'ẵ' | 'Ẵ' | 'ặ' | 'Ặ' => ('a', VowelMod::Breve),
+            'ă' | 'Ă' | 'ắ' | 'Ắ' | 'ằ' | 'Ằ' | 'ẳ' | 'Ẳ' | 'ẵ' | 'Ẵ' | 'ặ' | 'Ặ' => {
+                ('a', VowelMod::Breve)
+            }
             // Circumflex vowels
-            'â' | 'Â' | 'ấ' | 'Ấ' | 'ầ' | 'Ầ' | 'ẩ' | 'Ẩ' | 'ẫ' | 'Ẫ' | 'ậ' | 'Ậ' => ('a', VowelMod::Circumflex),
-            'ê' | 'Ê' | 'ế' | 'Ế' | 'ề' | 'Ề' | 'ể' | 'Ể' | 'ễ' | 'Ễ' | 'ệ' | 'Ệ' => ('e', VowelMod::Circumflex),
-            'ô' | 'Ô' | 'ố' | 'Ố' | 'ồ' | 'Ồ' | 'ổ' | 'Ổ' | 'ỗ' | 'Ỗ' | 'ộ' | 'Ộ' => ('o', VowelMod::Circumflex),
+            'â' | 'Â' | 'ấ' | 'Ấ' | 'ầ' | 'Ầ' | 'ẩ' | 'Ẩ' | 'ẫ' | 'Ẫ' | 'ậ' | 'Ậ' => {
+                ('a', VowelMod::Circumflex)
+            }
+            'ê' | 'Ê' | 'ế' | 'Ế' | 'ề' | 'Ề' | 'ể' | 'Ể' | 'ễ' | 'Ễ' | 'ệ' | 'Ệ' => {
+                ('e', VowelMod::Circumflex)
+            }
+            'ô' | 'Ô' | 'ố' | 'Ố' | 'ồ' | 'Ồ' | 'ổ' | 'Ổ' | 'ỗ' | 'Ỗ' | 'ộ' | 'Ộ' => {
+                ('o', VowelMod::Circumflex)
+            }
             // Horn vowels
-            'ơ' | 'Ơ' | 'ớ' | 'Ớ' | 'ờ' | 'Ờ' | 'ở' | 'Ở' | 'ỡ' | 'Ỡ' | 'ợ' | 'Ợ' => ('o', VowelMod::Horn),
-            'ư' | 'Ư' | 'ứ' | 'Ứ' | 'ừ' | 'Ừ' | 'ử' | 'Ử' | 'ữ' | 'Ữ' | 'ự' | 'Ự' => ('u', VowelMod::Horn),
+            'ơ' | 'Ơ' | 'ớ' | 'Ớ' | 'ờ' | 'Ờ' | 'ở' | 'Ở' | 'ỡ' | 'Ỡ' | 'ợ' | 'Ợ' => {
+                ('o', VowelMod::Horn)
+            }
+            'ư' | 'Ư' | 'ứ' | 'Ứ' | 'ừ' | 'Ừ' | 'ử' | 'Ử' | 'ữ' | 'Ữ' | 'ự' | 'Ự' => {
+                ('u', VowelMod::Horn)
+            }
             // đ
             'đ' | 'Đ' => ('d', VowelMod::None),
             // Tone marked base vowels - return base without modification
-            'á' | 'Á' | 'à' | 'À' | 'ả' | 'Ả' | 'ã' | 'Ã' | 'ạ' | 'Ạ' => ('a', VowelMod::None),
-            'é' | 'É' | 'è' | 'È' | 'ẻ' | 'Ẻ' | 'ẽ' | 'Ẽ' | 'ẹ' | 'Ẹ' => ('e', VowelMod::None),
-            'í' | 'Í' | 'ì' | 'Ì' | 'ỉ' | 'Ỉ' | 'ĩ' | 'Ĩ' | 'ị' | 'Ị' => ('i', VowelMod::None),
-            'ó' | 'Ó' | 'ò' | 'Ò' | 'ỏ' | 'Ỏ' | 'õ' | 'Õ' | 'ọ' | 'Ọ' => ('o', VowelMod::None),
-            'ú' | 'Ú' | 'ù' | 'Ù' | 'ủ' | 'Ủ' | 'ũ' | 'Ũ' | 'ụ' | 'Ụ' => ('u', VowelMod::None),
-            'ý' | 'Ý' | 'ỳ' | 'Ỳ' | 'ỷ' | 'Ỷ' | 'ỹ' | 'Ỹ' | 'ỵ' | 'Ỵ' => ('y', VowelMod::None),
+            'á' | 'Á' | 'à' | 'À' | 'ả' | 'Ả' | 'ã' | 'Ã' | 'ạ' | 'Ạ' => {
+                ('a', VowelMod::None)
+            }
+            'é' | 'É' | 'è' | 'È' | 'ẻ' | 'Ẻ' | 'ẽ' | 'Ẽ' | 'ẹ' | 'Ẹ' => {
+                ('e', VowelMod::None)
+            }
+            'í' | 'Í' | 'ì' | 'Ì' | 'ỉ' | 'Ỉ' | 'ĩ' | 'Ĩ' | 'ị' | 'Ị' => {
+                ('i', VowelMod::None)
+            }
+            'ó' | 'Ó' | 'ò' | 'Ò' | 'ỏ' | 'Ỏ' | 'õ' | 'Õ' | 'ọ' | 'Ọ' => {
+                ('o', VowelMod::None)
+            }
+            'ú' | 'Ú' | 'ù' | 'Ù' | 'ủ' | 'Ủ' | 'ũ' | 'Ũ' | 'ụ' | 'Ụ' => {
+                ('u', VowelMod::None)
+            }
+            'ý' | 'Ý' | 'ỳ' | 'Ỳ' | 'ỷ' | 'Ỷ' | 'ỹ' | 'Ỹ' | 'ỵ' | 'Ỵ' => {
+                ('y', VowelMod::None)
+            }
             // Default: pass through
             _ => (c, VowelMod::None),
         }
@@ -91,9 +113,9 @@ impl CharInfo {
                 continue;
             }
             match ch.vowel_mod {
-                VowelMod::Breve => return Some(i),     // ă - highest priority
+                VowelMod::Breve => return Some(i),      // ă - highest priority
                 VowelMod::Circumflex => return Some(i), // â, ê, ô
-                VowelMod::Horn => return Some(i),      // ơ, ư
+                VowelMod::Horn => return Some(i),       // ơ, ư
                 VowelMod::None => {}
             }
         }
@@ -319,19 +341,20 @@ impl Vietnamese {
             if c == 'x' || c == 'z' {
                 // x/z removes tone if it comes after a vowel
                 // Check if the previous character (in chars) is a vowel
-                let prev_is_vowel = chars.last().map_or(false, |ch| ch.can_take_tone);
+                // let prev_is_vowel = chars.last().map_or(false, |ch| ch.can_take_tone);
+                let prev_is_vowel = chars.last().is_some_and(|ch| ch.can_take_tone);
                 if prev_is_vowel {
-                    pending_tone = Some(ToneMark::None);  // Remove tone
+                    pending_tone = Some(ToneMark::None); // Remove tone
                     i += 1;
                     continue;
                 }
                 // Fall through: treat as regular character
             } else {
                 let tone = match c {
-                    's' => Some(ToneMark::Acute),      // sắc
-                    'f' => Some(ToneMark::Grave),      // huyền
-                    'j' => Some(ToneMark::HookAbove),  // hỏi
-                    'r' => Some(ToneMark::DotBelow),   // nặng
+                    's' => Some(ToneMark::Acute),     // sắc
+                    'f' => Some(ToneMark::Grave),     // huyền
+                    'j' => Some(ToneMark::HookAbove), // hỏi
+                    'r' => Some(ToneMark::DotBelow),  // nặng
                     _ => None,
                 };
 
@@ -377,7 +400,10 @@ impl Vietnamese {
 
     /// Process Telex input keystroke by keystroke
     fn process_telex(&self, keystroke: &Keystroke, buffer: &str) -> ProcessResult {
-        if let Keystroke { key: Key::Char(c), .. } = keystroke {
+        if let Keystroke {
+            key: Key::Char(c), ..
+        } = keystroke
+        {
             // Check for terminating characters (commit)
             if c.is_ascii_whitespace() || c.is_ascii_punctuation() {
                 // Commit current buffer
@@ -402,7 +428,8 @@ impl Vietnamese {
 
                 if let Some(replaced) = vowel_mod {
                     // Replace last char with modified vowel
-                    let new_buffer: String = buffer_chars[..buffer_chars.len()-1].iter().collect();
+                    let new_buffer: String =
+                        buffer_chars[..buffer_chars.len() - 1].iter().collect();
                     return ProcessResult::BufferUpdated(format!("{}{}", new_buffer, replaced));
                 }
             }
@@ -413,14 +440,15 @@ impl Vietnamese {
                 'f' => Some(ToneMark::Grave),      // huyền
                 'j' => Some(ToneMark::HookAbove),  // hỏi
                 'r' => Some(ToneMark::DotBelow),   // nặng
-                'x' | 'z' => Some(ToneMark::None),   // remove tone
+                'x' | 'z' => Some(ToneMark::None), // remove tone
                 _ => None,
             };
 
             if let Some(tone_mark) = tone {
                 // Find the vowel to apply tone to
                 // Priority: ă > â > ê > ô > ơ > ư > a > e > i > o > u > y
-                let mut chars: Vec<CharInfo> = buffer_chars.iter().map(|&ch| CharInfo::new(ch)).collect();
+                let chars: Vec<CharInfo> =
+                    buffer_chars.iter().map(|&ch| CharInfo::new(ch)).collect();
 
                 if let Some(tone_pos) = CharInfo::find_tone_position(&chars) {
                     // Apply tone to the character at tone_pos
@@ -492,11 +520,11 @@ impl Vietnamese {
             // Check for VNI tone mark (1-5)
             // In VNI, tone marks always come at the end of syllable
             let tone = match c {
-                '1' => Some(ToneMark::Acute),      // sắc
-                '2' => Some(ToneMark::Grave),      // huyền
-                '3' => Some(ToneMark::HookAbove),  // hỏi
-                '4' => Some(ToneMark::Tilde),      // ngã
-                '5' => Some(ToneMark::DotBelow),   // nặng
+                '1' => Some(ToneMark::Acute),     // sắc
+                '2' => Some(ToneMark::Grave),     // huyền
+                '3' => Some(ToneMark::HookAbove), // hỏi
+                '4' => Some(ToneMark::Tilde),     // ngã
+                '5' => Some(ToneMark::DotBelow),  // nặng
                 _ => None,
             };
 
@@ -540,7 +568,10 @@ impl Vietnamese {
 
     /// Process VNI input keystroke by keystroke
     fn process_vni(&self, keystroke: &Keystroke, buffer: &str) -> ProcessResult {
-        if let Keystroke { key: Key::Char(c), .. } = keystroke {
+        if let Keystroke {
+            key: Key::Char(c), ..
+        } = keystroke
+        {
             // Check for terminating characters (commit)
             if c.is_ascii_whitespace() || c.is_ascii_punctuation() {
                 // Commit current buffer
@@ -551,17 +582,18 @@ impl Vietnamese {
 
             // Check for VNI tone mark (1-5)
             let tone = match c {
-                '1' => Some(ToneMark::Acute),      // sắc
-                '2' => Some(ToneMark::Grave),      // huyền
-                '3' => Some(ToneMark::HookAbove),  // hỏi
-                '4' => Some(ToneMark::Tilde),      // ngã
-                '5' => Some(ToneMark::DotBelow),   // nặng
+                '1' => Some(ToneMark::Acute),     // sắc
+                '2' => Some(ToneMark::Grave),     // huyền
+                '3' => Some(ToneMark::HookAbove), // hỏi
+                '4' => Some(ToneMark::Tilde),     // ngã
+                '5' => Some(ToneMark::DotBelow),  // nặng
                 _ => None,
             };
 
             if let Some(tone_mark) = tone {
                 // Apply tone to first vowel
-                let chars: Vec<CharInfo> = buffer_chars.iter().map(|&ch| CharInfo::new(ch)).collect();
+                let chars: Vec<CharInfo> =
+                    buffer_chars.iter().map(|&ch| CharInfo::new(ch)).collect();
 
                 if let Some(tone_pos) = CharInfo::find_tone_position(&chars) {
                     // Apply tone to the character at tone_pos
@@ -598,7 +630,8 @@ impl Vietnamese {
 
                 if let Some(replaced) = vowel_mod {
                     // Replace last char with modified vowel
-                    let new_buffer: String = buffer_chars[..buffer_chars.len()-1].iter().collect();
+                    let new_buffer: String =
+                        buffer_chars[..buffer_chars.len() - 1].iter().collect();
                     return ProcessResult::BufferUpdated(format!("{}{}", new_buffer, replaced));
                 }
             }
@@ -634,8 +667,11 @@ impl LanguagePack for Vietnamese {
     fn is_valid_composition(&self, buffer: &str) -> bool {
         // Valid if contains printable Vietnamese-friendly characters
         buffer.chars().all(|c| {
-            c.is_ascii_alphanumeric() || c.is_ascii_whitespace() ||
-            matches!(c, 'ă'|'â'|'ê'|'ô'|'ơ'|'ư'|'đ'|
+            c.is_ascii_alphanumeric()
+                || c.is_ascii_whitespace()
+                || matches!(
+                    c,
+                    'ă'|'â'|'ê'|'ô'|'ơ'|'ư'|'đ'|
                      'Ă'|'Â'|'Ê'|'Ô'|'Ơ'|'Ư'|'Đ'|
                      // Tone marked vowels
                      'à'|'á'|'ả'|'ã'|'ạ'|'ằ'|'ắ'|'ẳ'|'ẵ'|'ặ'|'ầ'|'ấ'|'ẩ'|'ẫ'|'ậ'|
@@ -647,7 +683,8 @@ impl LanguagePack for Vietnamese {
                      'Ò'|'Ó'|'Ỏ'|'Õ'|'Ọ'|'Ồ'|'Ố'|'Ổ'|'Ỗ'|'Ộ'|'Ờ'|'Ớ'|'Ở'|'Ỡ'|'Ợ'|
                      'ù'|'ú'|'ủ'|'ũ'|'ụ'|'ừ'|'ứ'|'ử'|'ữ'|'ự'|
                      'Ù'|'Ú'|'Ủ'|'Ũ'|'Ụ'|'Ừ'|'Ứ'|'Ử'|'Ữ'|'Ự'|
-                     'ỳ'|'ý'|'ỷ'|'ỹ'|'ỵ'|'Ỳ'|'Ý'|'Ỷ'|'Ỹ'|'Ỵ')
+                     'ỳ'|'ý'|'ỷ'|'ỹ'|'ỵ'|'Ỳ'|'Ý'|'Ỷ'|'Ỹ'|'Ỵ'
+                )
         })
     }
 
