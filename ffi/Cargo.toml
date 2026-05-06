@@ -8,6 +8,8 @@ authors.workspace = true
 
 [dependencies]
 hip-key-core = { path = "../core" }
+hip-key-lang-vi = { path = "../lang/vi" }
+libc = "0.2"
 
 [lib]
 crate-type = ["cdylib", "staticlib"]
