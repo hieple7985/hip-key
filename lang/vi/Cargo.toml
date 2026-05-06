@@ -8,3 +8,10 @@ authors.workspace = true
 
 [dependencies]
 hip-key-core = { path = "../../core" }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "engine_bench"
+harness = false

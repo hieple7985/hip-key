@@ -7,4 +7,6 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-# Language-agnostic core engine
+
+[dev-dependencies]
+criterion.workspace = true

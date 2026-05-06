@@ -15,4 +15,4 @@ repository = "https://github.com/hieple7985/hip-key"
 authors = ["Hiệp"]
 
 [workspace.dependencies]
-# Core dependencies used across crates
+criterion = "0.5"
