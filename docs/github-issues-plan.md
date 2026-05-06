@@ -1,325 +1,292 @@
-# GitHub Issues Plan
+# hip-key Roadmap
 
-## Phase 1: Core Telex Implementation (MVP)
+## Tổng quan chiến lược
 
-### Issue #1 - Telex Tone Marks
-**Title:** Implement Telex tone mark rules (s, f, j, r, x)
-**Priority:** High
-**Labels:** enhancement, vietnamese, telex
-**Estimate:** Medium
+**Mô hình:** B2C Freemium
+- **Free:** macOS Telex IME + dictionary + basic learning
+- **Paid ($2.99-4.99/mo):** AI local correction (privacy-first, offline)
+- **Expansion:** Cross-device sync, iOS, other languages
 
-**Description:**
-Current Telex implementation only handles vowel modifications (ă, â, ê, ô, ơ, ư, đ). Need to add tone marks:
-- s → sắc
-- f -> hỏi
-- j -> ngã
-- r -> nặng
-- x -> none (remove tone)
-
-**Requirements:**
-- Tone marks apply to the nearest vowel in the syllable
-- Handle order-independent input (as, sa both work)
-- Proper tone placement rules (e.g., tone goes on ă/â not a)
-
-**Acceptance Criteria:**
-- `as` → á, `sa` → á
-- `aws` → ắ
-- `dd` → đ (no tone)
-- `ax` → a (remove tone)
-- Test suite covering all combinations
+**Target người dùng:**
+- Vietnamese diaspora ở Mỹ/EU/AU (beachhead market)
+- Writers, developers, content creators Việt Nam cần gõ tiếng Việt nhiều
 
 ---
 
-### Issue #2 - VNI Input Method
-**Title:** Implement VNI input method
-**Priority:** High
-**Labels:** enhancement, vietnamese, vni
-**Estimate:** Medium
+## Feature Analysis: Cái nào đủ lý do để chuyển + trả tiền
 
-**Description:**
-Add VNI input method alongside Telex.
+### ✅ ĐỦ LÝ DO CHUYỂN (Switching Motivation)
 
-**Requirements:**
-- VNI vowel modifications: a8 → ă, a6 → â, o7 → ơ, o6 → ô, u7 → ư, d9 → đ
-- VNI tone marks: 1 → sắc, 2 → huyền, 3 → hỏi, 4 → ngã, 5 → nặng
+#### Reason #1: macOS Telex (HIGHEST PRIORITY)
+**Pain point cụ thể:** macOS không có Telex thật sự. Chỉ có VNI hoặc dead-key. Người Việt ở Mỹ/EU đã quen Telex từ Windows.
 
-**Acceptance Criteria:**
-- `a8` → ă
-- `a81` → ắ
-- VNI and Telex can coexist (selectable via config)
+**Sản phẩm:** macOS IME với Telex đầy đủ như Unikey, UI hiện đại.
+
+**Lý do free users sẽ switch:** Đây là vấn đề thực sự họ gặp hàng ngày. Không có giải pháp nào tốt trên macOS.
+
+**Đã làm xong:** Core Telex/VNI engine ✅
 
 ---
 
-### Issue #3 - Proper Engine State Management
-**Title:** Fix engine keystroke-by-keystroke processing
-**Priority:** High
-**Labels:** bug, core
-**Estimate:** Medium
+#### Reason #2: AI Local Correction
+**Pain point:** Viết sai chính tả tiếng Việt, không có tool nào sửa được local (Grammarly không support tiếng Việt).
 
-**Description:**
-Current CLI uses a shortcut `convert_telex()` method. The real engine's `process()` method should work correctly keystroke-by-keystroke.
+**Sản phẩm:** Local AI model (mistral.cpp) chạy offline, privacy-first, như Grammarly cho tiếng Việt.
 
-**Requirements:**
-- Engine should accumulate state properly
-- Language pack `process()` returns appropriate `ProcessResult`
-- Buffer updates correctly after each keystroke
+**Lý do users sẽ trả tiền:** Tạo ra value rõ ràng mỗi ngày cho writer/content creator.
 
-**Acceptance Criteria:**
-- Can type character by character and see correct composition
-- Backspace works correctly
-- Engine integration tests pass
+**Chưa làm** → Phase 1
 
 ---
 
-## Phase 2: Dictionary & Completion
+#### Reason #3: Modern UI (Nice to have, không đủ để trả tiền)
+**Sản phẩm:** UI đẹp như app hiện đại, không phải như Unikey 1990s.
 
-### Issue #4 - Vietnamese Word Dictionary
-**Title:** Add Vietnamese word dictionary for completion
-**Priority:** Medium
-**Labels:** enhancement, vietnamese, dictionary
-**Estimate:** Large
+**Giá trị:** Tạo ấn tượng đầu tiên tốt, nhưng không đủ lý do switch nếu không có Reason #1 hoặc #2.
 
-**Description:**
-Build and integrate a Vietnamese word dictionary for:
-- Autocomplete suggestions
-- Spell checking (optional)
-- Frequency-based ranking
-
-**Requirements:**
-- Dictionary file format (JSON, CSV, or custom binary)
-- Efficient lookup (trie or hash-based)
-- ~10k-50k common words
-- Word frequency data for ranking
-
-**Acceptance Criteria:**
-- Dictionary loads at startup
-- `generate_candidates()` returns suggestions
-- Performance: < 1ms per lookup
+**Làm cùng với macOS adapter**
 
 ---
 
-### Issue #5 - Candidate Selection UI
-**Title:** Design candidate selection flow
-**Priority:** Medium
-**Labels:** design, ux
-**Estimate:** Small
+#### Reason #4: Never Crash / Reliable
+**Pain point:** Unikey chết bất chợt, mất buffer khi gõ.
 
-**Description:**
-Define how users select from candidate suggestions.
+**Sản phẩm:** IME không bao giờ crash, buffer được backup.
 
-**Options:**
-1. Number key selection (1-9)
-2. Arrow key navigation
-3. Tab cycling
-
-**Decision needed:** Which approach for CLI? Which for native UI?
+**Lý do nhỏ nhưng có:** Đặc biệt quan trọng với developers/writers.
 
 ---
 
-## Phase 3: FFI & Platform Integration
+### ❌ KHÔNG ĐỦ LÝ DO CHUYỂN (Already have in free competitors)
 
-### Issue #6 - Complete C FFI API
-**Title:** Implement full C-compatible API
-**Priority:** High
-**Labels:** enhancement, ffi, c-api
-**Estimate:** Large
+| Feature | Free Competitors | Lý do không đủ |
+|---|---|---|
+| Dictionary 50k+ từ | Unikey, EVkey có đủ | Không tạo differentiation |
+| Macro expansion | Unikey có | Người dùng không dùng |
+| Config system | Unikey có | Nice to have, không switch reason |
+| Multiple input methods | Tất cả đều có | Table stakes |
+| Frequency learning | EVkey có | Không đủ justify switching cost |
 
-**Description:**
-Complete the FFI layer for platform adapters.
+---
 
-**Required Functions:**
-```c
-// Engine lifecycle
-hipkey_engine_create()
-hipkey_engine_destroy()
-hipkey_engine_set_language_pack()
+## Trạng thái hiện tại
 
-// Input processing
-hipkey_process_keystroke()
-hipkey_get_composing_text()
-hipkey_commit()
+### ✅ ĐÃ LÀM XONG
 
-// Candidates
-hipkey_get_candidates()
-hipkey_select_candidate()
+| Component | Status | Notes |
+|---|---|---|
+| Core engine (keystroke, buffer, langpack) | ✅ Done | Language-agnostic |
+| Vietnamese Telex input | ✅ Done | aw→ă, aa→â, tone marks đầy đủ |
+| Vietnamese VNI input | ✅ Done | a8→ă, a6→â, tone marks 1-5 |
+| Dictionary (Trie + 300+ words) | ✅ Done | Expandable |
+| Frequency learning system | ✅ Done | Local storage |
+| C FFI API | ✅ Done | C header generated |
+| Config system | ✅ Done | TOML-based |
+| Macro expansion | ✅ Done | Default abbreviations |
+| Benchmarks | ✅ Done | Criterion.rs setup |
+| Security hardening | ✅ Done | FFI null checks, alloc guards |
+| macOS adapter skeleton | 🔨 WIP | Swift + IMKKit, chưa complete |
 
-// State
-hipkey_clear()
-hipkey_is_composing()
+### ❌ CHƯA LÀM (Prioritized)
+
+| Feature | Priority | Notes |
+|---|---|---|
+| macOS Telex IME hoàn chỉnh | **P0 - NOW** | Beachhead product |
+| AI local correction | **P1 - Next** | Conversion driver |
+| macOS build + install | **P0 - NOW** | Phải build được mới test được |
+| macOS App Store distribution | P1 | Revenue path |
+| iOS app | P2 | Expand ecosystem |
+| Cross-device sync | P2 | Retention, lock-in |
+| Polish language pack | P3 | Expansion vector |
+
+---
+
+## Roadmap by Phase
+
+### Phase P0: macOS v1.0 (NOW - 2-3 tuần)
+
+**Mục tiêu:** Release macOS Telex IME miễn phí, acquire users
+
+**Tasks:**
+- [ ] Complete macOS IMKInputController implementation
+- [ ] Fix Swift FFI bridging (libhip_key_ffi.a)
+- [ ] Build .app bundle đúng format
+- [ ] Test Telex: `aws` → `ắ`, `dd` → `đ`, `chaof` → `chào`
+- [ ] Test backspace, arrow keys, escape
+- [ ] Test candidate selection (số 1-9)
+- [ ] Create AppIcon (simple icon design)
+- [ ] Write README cho macOS installation
+
+**Deliverable:** `.app` file + installation guide, users có thể install thủ công
+
+**Revenue model:** Free (acquisition phase)
+
+---
+
+### Phase P1: AI Local Correction (1-2 tháng)
+
+**Mục tiêu:** Paid tier với AI correction, tạo revenue
+
+**Tasks:**
+- [ ] Integrate mistral.cpp (hoặc llama.cpp) vào core
+- [ ] Train/fine-tune model cho Vietnamese spelling correction
+- [ ] Buffer correction suggestions (highlight misspelled words)
+- [ ] Accept/reject correction UI
+- [ ] Offline-first (không cần internet)
+- [ ] Performance: < 50ms per correction
+
+**Revenue model:**
+```
+Free: Basic Telex + Dictionary
+Paid ($2.99/mo): AI correction
+Paid+ ($4.99/mo): AI + cloud backup + themes
 ```
 
-**Acceptance Criteria:**
-- All functions implemented and tested
-- C header file generated
-- Memory safety verified (no leaks)
+**Deliverable:** Paid upgrade feature
 
 ---
 
-### Issue #7 - macOS Platform Adapter
-**Title:** Build macOS input method adapter
-**Priority:** Medium
-**Labels:** platform, macos
-**Estimate:** Large
+### Phase P2: Distribution & Growth (1-3 tháng)
 
-**Requirements:**
-- Uses FFI layer
-- Integrates with macOS IME API
-- System preference pane for language selection
+**Mục tiêu:** Scale user base
 
----
+**Tasks:**
+- [ ] macOS App Store submission
+- [ ] Apple Developer account ($99/năm)
+- [ ] App Store listing optimization (keywords, screenshots)
+- [ ] Website: landing page, download
+- [ ] Viral: "tell a friend" referral program
+- [ ] Community: Vietnamese subreddits, forums
 
-### Issue #8 - Windows Platform Adapter
-**Title:** Build Windows TSF adapter
-**Priority:** Medium
-**Labels:** platform, windows
-**Estimate:** Large
+**Revenue model:**
+- App Store subscription (Apple takes 15-30%)
+- Direct website sales (higher margin)
 
 ---
 
-### Issue #9 - Linux IBus/Fcitx Adapter
-**Title:** Build Linux input method adapter
-**Priority:** Low
-**Labels:** platform, linux
-**Estimate:** Large
+### Phase P3: iOS + Cross-device (3-6 tháng)
+
+**Mục tiêu:** Lock-in users vào ecosystem
+
+**Tasks:**
+- [ ] iOS keyboard extension (InputMethodKit trên iOS)
+- [ ] iCloud sync cho learning data
+- [ ] Sync preferences across devices
+- [ ] iOS App Store launch
+
+**Revenue model:**
+- Cross-device sync là feature của Paid+ tier
 
 ---
 
-## Phase 4: Polish & Features
+### Phase P4: Polish Language Pack (6-12 tháng)
 
-### Issue #10 - Configuration System
-**Title:** Design and implement config system
-**Priority:** Medium
-**Labels:** enhancement, config
-**Estimate:** Medium
+**Mục tiêu:** Mở rộng ra thị trường mới
 
-**Description:**
-Allow users to configure:
-- Default input method (Telex/VNI)
-- Key bindings
-- Auto-commit options
-- Enable/disable smart features
+**Tasks:**
+- [ ] Polish language pack (35M speakers)
+- [ ] Czech/Slovak/Hungarian (15M speakers)
+- [ ] Romanian (25M speakers)
+- [ ] Generalize architecture cho easy lang pack creation
 
-**Config file locations:**
-- macOS: `~/Library/Application Support/hip-key/config.toml`
-- Linux: `~/.config/hip-key/config.toml`
-- Windows: `%APPDATA%\hip-key\config.toml`
+**Revenue model:** Same freemium model, new markets
 
 ---
 
-### Issue #11 - Macro/Abbreviation Expansion
-**Title:** Add custom text expansion
-**Priority:** Low
-**Labels:** enhancement, feature
-**Estimate:** Small
+## Chi tiết kỹ thuật: AI Local Correction
 
-**Example:**
-- `vk` → `việt Nam`
-- `tg` → `tin greet` → `tin chào`
-- User-defined in config
+### Tại sao local (on-device) thay vì cloud?
 
----
+| | Local AI | Cloud AI |
+|---|---|---|
+| Privacy | ✅ 100% private | ❌ Keystrokes leave device |
+| Cost | ✅ Near zero marginal cost | ❌ API costs per request |
+| Latency | ✅ < 50ms | ❌ 200-500ms network |
+| Offline | ✅ Works without internet | ❌ Fails offline |
+| Accuracy | ✅ Fine-tuned cho VN | ✅ Better models possible |
 
-### Issue #12 - Learning/Ranking System
-**Title:** Implement frequency-based candidate ranking
-**Priority:** Low
-**Labels:** enhancement, smart
-**Estimate:** Large
+### Technology Stack
 
-**Description:**
-- Track user word selections
-- Adjust candidate ranking based on frequency
-- Persist learning data locally
+- **Model:** mistral.cpp hoặc tinyllama quantized (< 100MB)
+- **Fine-tuning data:** Vietnamese Wikipedia, news articles, common typos
+- **Inference:** On-device, < 50ms latency
+- **Storage:** Compressed model bundled với app
 
-**Privacy:** All data local, no cloud sync (unless opt-in)
+### Correction Flow
 
----
+```
+User types: "toi di hoc"
+    ↓
+Local AI detects: "hoc" không trong dictionary
+    ↓
+Suggests: "học" (confidence 0.85)
+    ↓
+User accepts (Tab/Enter) or ignores
+    ↓
+If accepted: Update learning frequency
+```
 
-## Documentation
+### Pricing cho AI correction
 
-### Issue #13 - Contributor Guide
-**Title:** Write contributing guidelines
-**Priority:** Medium
-**Labels:** documentation
-**Estimate:** Small
+- **$2.99/tháng** hoặc **$24.99/năm** (giảm ~30%)
 
-**Include:**
-- How to add a new language pack
-- Code style guidelines
-- PR process
-- Test requirements
+**Psychological pricing:** Để giá $2.99 thay vì $3.00 — nghe rẻ hơn mà psychological effect đủ.
 
 ---
 
-### Issue #14 - Language Pack Authoring Guide
-**Title:** Document how to create language packs
-**Priority:** Medium
-**Labels:** documentation
-**Estimate:** Medium
+## Metrics & Goals
 
-**Include:**
-- `LanguagePack` trait documentation
-- Example minimal language pack
-- Best practices
-- Testing guide
+### Năm 1
 
----
+| Metric | Goal |
+|---|---|
+| macOS downloads | 50,000 |
+| Monthly active users | 10,000 |
+| Paid subscribers | 500-1,000 |
+| Monthly revenue | $1,500-3,000 |
+| App Store rating | 4.5+ stars |
 
-## Meta Issues
+### Năm 2
 
-### Issue #15 - Performance Benchmarks
-**Title:** Establish performance benchmarks
-**Priority:** Medium
-**Labels:** testing, performance
-**Estimate:** Medium
-
-**Metrics to track:**
-- Keystroke processing latency (target: < 100μs)
-- Dictionary lookup time (target: < 1ms)
-- Memory usage
-
-**Tools:** Criterion.rs for benchmarking
+| Metric | Goal |
+|---|---|
+| macOS + iOS users | 200,000 |
+| Paid subscribers | 5,000+ |
+| MRR | $15,000 |
+| ARR | $180,000 |
 
 ---
 
-### Issue #16 - Security Audit
-**Title:** Security review for FFI layer
-**Priority:** High (before v1.0)
-**Labels:** security
-**Estimate:** Medium
+## Risks & Mitigations
 
-**Review:**
-- Buffer overflow risks
-- Memory safety at FFI boundary
-- Input validation
+| Risk | Likelihood | Mitigation |
+|---|---|---|
+| Apple rejects macOS IME app | Medium | Follow guidelines carefully, use proper entitlements |
+| Users don't convert to paid | High | Focus on AI correction quality, show value in free tier |
+| Large company copies (Google, Apple) | Low-Medium | They won't build for small VN market specifically |
+| AI model too slow on old Macs | Medium | Use small quantized model, graceful degradation |
 
 ---
 
-## Order of Implementation (Suggested)
+## Order of Implementation (Revised)
 
-1. **MVP Telex** (#1, #3) - Get basic typing working
-2. **VNI** (#2) - Second input method
-3. **FFI Complete** (#6) - Enable platform adapters
-4. **macOS Adapter** (#7) - First real platform
-5. **Dictionary** (#4) - Smart completion
-6. **Config** (#10) - User customization
-7. **Documentation** (#13, #14) - Enable contributors
-8. **Windows/Linux** (#8, #9) - Cross-platform
-9. **Advanced features** (#11, #12) - Nice-to-haves
-10. **Benchmarks + Security** (#15, #16) - Pre-v1.0
+```
+NOW:       macOS v1.0 (P0)
+Month 1-2: AI correction integration (P1)
+Month 2-3: App Store submission (P2)
+Month 3-6: iOS app (P3)
+Month 6-12: Polish language pack (P4)
+```
 
 ---
 
-## Labels to Create on GitHub
+## Labels cho GitHub Issues
 
-- `enhancement` - New features
-- `bug` - Bugs to fix
-- `vietnamese` - Vietnamese-specific work
-- `telex` / `vni` - Input method specific
-- `core` - Core engine work
-- `ffi` - FFI layer
-- `platform` - Platform adapters
-- `documentation` - Docs
-- `testing` - Tests
-- `security` - Security issues
+- `p0` - Must have (macOS Telex)
+- `p1` - Should have (AI correction)
+- `p2` - Nice to have (iOS, sync)
+- `enhancement` - Feature request
+- `bug` - Bug report
+- `platform:macos` / `platform:ios` / `platform:windows`
+- `ai` - AI-related work
 - `good first issue` - Beginner-friendly
-- `help wanted` - Community contributions
