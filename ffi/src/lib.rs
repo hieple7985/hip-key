@@ -7,9 +7,7 @@ use hip_key_core::{
     Engine, EngineEvent, Key, Keystroke, LanguagePack, Modifiers,
 };
 use hip_key_core::keystroke::ArrowDirection;
-#[cfg(test)]
-use std::ffi::CStr;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
 
@@ -49,9 +47,18 @@ pub struct HipKeyCandidateList {
     len: usize,
 }
 
+#[repr(C)]
+pub struct HipKeyActionResult {
+    success: bool,
+    display_text: *mut c_char,
+    commit_text: *mut c_char,
+    should_commit: bool,
+}
+
 struct EngineState {
     engine: Engine,
     lang_pack: Option<Box<dyn LanguagePack>>,
+    agent: hip_key_core::Agent,
     last_event: Option<EngineEvent>,
     last_commit: Option<CString>,
 }
@@ -61,6 +68,7 @@ pub extern "C" fn hipkey_engine_create() -> *mut HipKeyEngine {
     let state = Box::new(EngineState {
         engine: Engine::new(),
         lang_pack: None,
+        agent: hip_key_core::Agent::new(),
         last_event: None,
         last_commit: None,
     });
@@ -308,6 +316,98 @@ pub extern "C" fn hipkey_candidate_list_free(list: HipKeyCandidateList) {
     unsafe { std::alloc::dealloc(list.candidates as *mut u8, layout) };
 }
 
+#[no_mangle]
+pub extern "C" fn hipkey_agent_enable(engine: *mut HipKeyEngine) -> HipKeyResult {
+    if engine.is_null() {
+        return HipKeyResult::InvalidArgument;
+    }
+    let state = unsafe { &mut *(engine as *mut EngineState) };
+    state.agent.enable();
+    HipKeyResult::Success
+}
+
+#[no_mangle]
+pub extern "C" fn hipkey_agent_disable(engine: *mut HipKeyEngine) -> HipKeyResult {
+    if engine.is_null() {
+        return HipKeyResult::InvalidArgument;
+    }
+    let state = unsafe { &mut *(engine as *mut EngineState) };
+    state.agent.disable();
+    HipKeyResult::Success
+}
+
+#[no_mangle]
+pub extern "C" fn hipkey_agent_is_enabled(engine: *mut HipKeyEngine) -> bool {
+    if engine.is_null() {
+        return false;
+    }
+    let state = unsafe { &*(engine as *const EngineState) };
+    state.agent.is_enabled()
+}
+
+#[no_mangle]
+pub extern "C" fn hipkey_agent_process(
+    engine: *mut HipKeyEngine,
+    text: *const c_char,
+) -> HipKeyActionResult {
+    if engine.is_null() || text.is_null() {
+        return HipKeyActionResult {
+            success: false,
+            display_text: ptr::null_mut(),
+            commit_text: ptr::null_mut(),
+            should_commit: false,
+        };
+    }
+
+    let text_str = unsafe { CStr::from_ptr(text) };
+    let text_str = match text_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return HipKeyActionResult {
+            success: false,
+            display_text: ptr::null_mut(),
+            commit_text: ptr::null_mut(),
+            should_commit: false,
+        },
+    };
+
+    let state = unsafe { &*(engine as *const EngineState) };
+
+    if let Some(result) = state.agent.process(text_str) {
+        let display_cstr = CString::new(result.display_text).unwrap_or_default();
+        let commit_cstr = result.commit_text.as_ref().map(|s| CString::new(s.clone()).unwrap_or_default());
+        let commit_ptr = commit_cstr.map(|c| c.into_raw()).unwrap_or(ptr::null_mut());
+
+        return HipKeyActionResult {
+            success: result.success,
+            display_text: display_cstr.into_raw(),
+            commit_text: commit_ptr,
+            should_commit: result.should_commit,
+        };
+    }
+
+    HipKeyActionResult {
+        success: false,
+        display_text: ptr::null_mut(),
+        commit_text: ptr::null_mut(),
+        should_commit: false,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn hipkey_agent_action_result_display_text(result: HipKeyActionResult) -> *mut c_char {
+    result.display_text
+}
+
+#[no_mangle]
+pub extern "C" fn hipkey_agent_action_result_free(result: HipKeyActionResult) {
+    if !result.display_text.is_null() {
+        unsafe { drop(CString::from_raw(result.display_text)) };
+    }
+    if !result.commit_text.is_null() {
+        unsafe { drop(CString::from_raw(result.commit_text)) };
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,6 +549,53 @@ mod tests {
         let text = unsafe { CStr::from_ptr(composing) };
         assert_eq!(text.to_str().unwrap(), "");
         hipkey_string_free(composing);
+
+        hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_agent_enable_disable() {
+        let engine = hipkey_engine_create();
+        assert!(hipkey_agent_is_enabled(engine));
+
+        assert_eq!(hipkey_agent_disable(engine), HipKeyResult::Success);
+        assert!(!hipkey_agent_is_enabled(engine));
+
+        assert_eq!(hipkey_agent_enable(engine), HipKeyResult::Success);
+        assert!(hipkey_agent_is_enabled(engine));
+
+        hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_agent_null_safety() {
+        assert_eq!(hipkey_agent_enable(ptr::null_mut()), HipKeyResult::InvalidArgument);
+        assert_eq!(hipkey_agent_disable(ptr::null_mut()), HipKeyResult::InvalidArgument);
+        assert!(!hipkey_agent_is_enabled(ptr::null_mut()));
+    }
+
+    #[test]
+    fn test_agent_process_calc() {
+        let engine = hipkey_engine_create();
+
+        let result = hipkey_agent_process(engine, CString::new("calc 10+5").unwrap().as_ptr());
+        assert!(result.success);
+        assert!(!result.display_text.is_null());
+        let display = unsafe { CStr::from_ptr(result.display_text) };
+        assert!(display.to_str().unwrap().contains("15"));
+        hipkey_agent_action_result_free(result);
+
+        hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_agent_process_time() {
+        let engine = hipkey_engine_create();
+
+        let result = hipkey_agent_process(engine, CString::new("giờ mấy rồi").unwrap().as_ptr());
+        assert!(result.success);
+        assert!(!result.display_text.is_null());
+        hipkey_agent_action_result_free(result);
 
         hipkey_engine_destroy(engine);
     }
