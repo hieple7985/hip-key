@@ -1,0 +1,61 @@
+name: HipKeyInputMethod
+options:
+  bundleIdPrefix: com.hipkey
+  deploymentTarget:
+    macOS: "10.15"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "10.15"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    PRODUCT_NAME: HipKeyInputMethod
+    INFOPLIST_FILE: HipKeyInputMethod/Info.plist
+    SWIFT_OBJC_BRIDGING_HEADER: HipKeyInputMethod/HipKeyInputMethod-Bridging-Header.h
+    CLANG_ENABLE_MODULES: YES
+    OTHER_LDFLAGS:
+      - "-Wl,-no_warn_duplicate_libraries"
+    LIBRARY_SEARCH_PATHS:
+      - "$(inherited)"
+      - "$(PROJECT_DIR)/Frameworks"
+
+targets:
+  HipKeyInputMethod:
+    type: application
+    platform: macOS
+    sources:
+      - path: HipKeyInputMethod
+        excludes:
+          - "*.md"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hipkey.inputmethod.vietnamese
+        INFOPLIST_FILE: HipKeyInputMethod/Info.plist
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@executable_path/../Frameworks"
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
+        GENERATE_INFOPLIST_FILE: false
+    dependencies:
+      - sdk: InputMethodKit.framework
+      - sdk: Cocoa.framework
+      - framework: Frameworks/libhip_key_ffi.a
+        embed: false
+
+schemes:
+  HipKeyInputMethod:
+    build:
+      targets:
+        HipKeyInputMethod: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

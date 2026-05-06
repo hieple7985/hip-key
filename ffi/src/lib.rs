@@ -226,8 +226,26 @@ pub extern "C" fn hipkey_get_candidates(engine: *mut HipKeyEngine) -> HipKeyCand
     }
 
     let count = candidates.len().min(9);
-    let layout = std::alloc::Layout::array::<HipKeyCandidate>(count).unwrap();
+    if count == 0 {
+        return HipKeyCandidateList {
+            candidates: ptr::null_mut(),
+            len: 0,
+        };
+    }
+    let layout = match std::alloc::Layout::array::<HipKeyCandidate>(count) {
+        Ok(l) => l,
+        Err(_) => return HipKeyCandidateList {
+            candidates: ptr::null_mut(),
+            len: 0,
+        },
+    };
     let c_ptr = unsafe { std::alloc::alloc(layout) as *mut HipKeyCandidate };
+    if c_ptr.is_null() {
+        return HipKeyCandidateList {
+            candidates: ptr::null_mut(),
+            len: 0,
+        };
+    }
 
     for (i, candidate) in candidates.iter().take(count).enumerate() {
         let c_text = CString::new(candidate.text.clone()).unwrap_or_default();
@@ -386,6 +404,51 @@ mod tests {
         let text = unsafe { CStr::from_ptr(committed) };
         assert_eq!(text.to_str().unwrap(), "xin");
         hipkey_string_free(committed);
+
+        hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_destroy_null_safe() {
+        hipkey_engine_destroy(ptr::null_mut());
+    }
+
+    #[test]
+    fn test_string_free_null_safe() {
+        hipkey_string_free(ptr::null_mut());
+    }
+
+    #[test]
+    fn test_candidate_list_free_empty() {
+        let empty = HipKeyCandidateList {
+            candidates: ptr::null_mut(),
+            len: 0,
+        };
+        hipkey_candidate_list_free(empty);
+    }
+
+    #[test]
+    fn test_process_without_language_pack() {
+        let engine = hipkey_engine_create();
+        let event = hipkey_process_keystroke(engine, 'a' as u32, false, false, false, false);
+        assert_eq!(event, HipKeyEngineEvent::PassThrough);
+        hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_clear_resets_state() {
+        let engine = hipkey_engine_create();
+        hipkey_engine_set_language_pack_vi(engine, 0);
+
+        hipkey_process_keystroke(engine, 'a' as u32, false, false, false, false);
+        hipkey_process_keystroke(engine, 'w' as u32, false, false, false, false);
+
+        hipkey_clear(engine);
+
+        let composing = hipkey_get_composing_text(engine);
+        let text = unsafe { CStr::from_ptr(composing) };
+        assert_eq!(text.to_str().unwrap(), "");
+        hipkey_string_free(composing);
 
         hipkey_engine_destroy(engine);
     }
