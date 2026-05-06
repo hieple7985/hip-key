@@ -2,7 +2,11 @@
 //!
 //! Input methods: Telex, VNI (extensible)
 
-use hip_key_core::{Keystroke, LanguagePack, ProcessResult, CandidateList, Key};
+mod trie;
+mod dictionary;
+
+use hip_key_core::{Keystroke, LanguagePack, ProcessResult, CandidateList, Candidate, Key};
+use dictionary::Dictionary;
 
 /// Vietnamese input method type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,17 +266,26 @@ impl CharInfo {
 /// Vietnamese language pack
 pub struct Vietnamese {
     method: InputMethod,
+    dictionary: Dictionary,
 }
 
 impl Vietnamese {
     pub fn new() -> Self {
         Self {
             method: InputMethod::default(),
+            dictionary: Dictionary::new(),
         }
     }
 
     pub fn with_method(method: InputMethod) -> Self {
-        Self { method }
+        Self {
+            method,
+            dictionary: Dictionary::new(),
+        }
+    }
+
+    pub fn dictionary(&self) -> &Dictionary {
+        &self.dictionary
     }
 
     /// Convert a Telex string to Vietnamese
@@ -420,7 +433,7 @@ impl Vietnamese {
             if let Some(tone_mark) = tone {
                 // Find the vowel to apply tone to
                 // Priority: ă > â > ê > ô > ơ > ư > a > e > i > o > u > y
-                let mut chars: Vec<CharInfo> = buffer_chars.iter().map(|&ch| CharInfo::new(ch)).collect();
+                let chars: Vec<CharInfo> = buffer_chars.iter().map(|&ch| CharInfo::new(ch)).collect();
 
                 if let Some(tone_pos) = CharInfo::find_tone_position(&chars) {
                     // Apply tone to the character at tone_pos
@@ -626,9 +639,16 @@ impl LanguagePack for Vietnamese {
         }
     }
 
-    fn generate_candidates(&self, _buffer: &str) -> CandidateList {
-        // TODO: Implement dictionary-based candidates (issue #4)
-        vec![]
+    fn generate_candidates(&self, buffer: &str) -> CandidateList {
+        if buffer.is_empty() {
+            return vec![];
+        }
+        let mut candidates = self.dictionary.suggest(buffer, 9);
+        if !candidates.iter().any(|c| c.text == buffer) {
+            candidates.insert(0, Candidate::new(buffer).with_confidence(1.0));
+        }
+        candidates.truncate(9);
+        candidates
     }
 
     fn is_valid_composition(&self, buffer: &str) -> bool {
@@ -837,5 +857,41 @@ mod tests {
         assert_eq!(vi.convert_vni("chao1"), "cháo");
         assert_eq!(vi.convert_vni("chao2"), "chào");
         assert_eq!(vi.convert_vni("u71n"), "ứn");
+    }
+
+    #[test]
+    fn test_generate_candidates_basic() {
+        let vi = Vietnamese::new();
+        let candidates = vi.generate_candidates("xin");
+        assert!(!candidates.is_empty());
+
+        let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"xin"));
+    }
+
+    #[test]
+    fn test_generate_candidates_prefix() {
+        let vi = Vietnamese::new();
+        let candidates = vi.generate_candidates("c");
+        assert!(!candidates.is_empty());
+
+        for c in &candidates {
+            assert!(c.text.starts_with('c') || c.text.starts_with('C'));
+        }
+    }
+
+    #[test]
+    fn test_generate_candidates_empty() {
+        let vi = Vietnamese::new();
+        let candidates = vi.generate_candidates("");
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn test_dictionary_accessible() {
+        let vi = Vietnamese::new();
+        assert!(vi.dictionary().contains("chào"));
+        assert!(vi.dictionary().contains("Việt Nam"));
+        assert!(vi.dictionary().len() > 100);
     }
 }

@@ -1,9 +1,10 @@
 //! CLI testing harness for hip-key
 //!
-//! Supports Telex and VNI input methods
+//! Supports Telex and VNI input methods with candidate suggestions
 
 use std::env;
 use std::io::{self, Write};
+use hip_key_core::LanguagePack;
 use hip_key_lang_vi::{Vietnamese, InputMethod};
 
 fn print_help(method: InputMethod) {
@@ -26,13 +27,35 @@ fn print_help(method: InputMethod) {
     println!("Commands:");
     println!("  q  → quit");
     println!("  m  → switch input method (Telex/VNI)");
+    println!("  s  → show candidate suggestions for input");
     println!();
+}
+
+fn show_candidates(vi: &Vietnamese, converted: &str) {
+    let candidates = vi.generate_candidates(converted);
+    if candidates.is_empty() {
+        println!("   No suggestions.");
+        return;
+    }
+    println!("   Suggestions:");
+    for (i, candidate) in candidates.iter().enumerate() {
+        let confidence_bar = {
+            let filled = (candidate.confidence * 10.0) as usize;
+            let empty = 10 - filled;
+            format!("{}{}", "█".repeat(filled), "░".repeat(empty))
+        };
+        println!("   {} {} {} ({:.0}%)",
+            i + 1,
+            candidate.text,
+            confidence_bar,
+            candidate.confidence * 100.0
+        );
+    }
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    // Check for method in command line args
     let mut method = if args.len() > 1 && args[1] == "vni" {
         InputMethod::VNI
     } else {
@@ -73,13 +96,15 @@ fn main() {
             continue;
         }
 
-        // Convert based on current method
         let vi = Vietnamese::with_method(method);
         let result = if method == InputMethod::Telex {
             vi.convert_telex(input)
         } else {
             vi.convert_vni(input)
         };
-        println!("   → {}\n", result);
+        println!("   → {}", result);
+
+        show_candidates(&vi, &result);
+        println!();
     }
 }
