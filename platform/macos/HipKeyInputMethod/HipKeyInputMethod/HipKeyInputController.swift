@@ -94,6 +94,29 @@ class HipKeyInputController: IMKInputController {
     }
 
     private func showCandidates(client: Any?) {
+        guard let client = client as? IMKTextInputProtocol else { return }
+
+        let candidateList = hipkey_get_candidates(engine)
+        guard candidateList.len > 0, let candidates = candidateList.candidates else {
+            return
+        }
+
+        var displayText = ""
+        for i in 0..<Int(candidateList.len) {
+            let candidate = candidates[i]
+            if let textPtr = candidate.text {
+                let text = String(cString: textPtr)
+                let number = i < 9 ? "\(i + 1). " : ""
+                displayText += "\(number)\(text)\n"
+            }
+        }
+
+        hipkey_candidate_list_free(candidateList)
+
+        if !displayText.isEmpty {
+            client.setMarkedText(displayText, selection: NSRange(location: 0, length: 0),
+                                 replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
     }
 
     private func mapKeyCode(_ event: NSEvent) -> UInt32 {

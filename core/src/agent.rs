@@ -293,7 +293,7 @@ fn simple_calc(expr: &str) -> Result<String, ()> {
     let mut nums: Vec<f64> = vec![];
     let mut ops: Vec<char> = vec![];
 
-    for (i, c) in chars.iter().enumerate() {
+    for (_i, c) in chars.iter().enumerate() {
         if c.is_ascii_digit() || *c == '.' {
             num_str.push(*c);
         } else if *c == '(' {
