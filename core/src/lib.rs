@@ -10,6 +10,7 @@ pub mod candidate;
 pub mod langpack;
 pub mod config;
 pub mod macro_expander;
+pub mod learning;
 
 // Core engine entry point
 pub use engine::{Engine, EngineEvent};
@@ -21,3 +22,4 @@ pub use candidate::{Candidate, CandidateList};
 pub use langpack::{LanguagePack, ProcessResult, DynLanguagePack};
 pub use config::Config;
 pub use macro_expander::MacroExpander;
+pub use learning::LearningStore;
