@@ -12,6 +12,7 @@ pub mod config;
 pub mod macro_expander;
 pub mod learning;
 pub mod agent;
+pub mod spell;
 
 // Core engine entry point
 pub use engine::{Engine, EngineEvent};
@@ -25,3 +26,4 @@ pub use config::Config;
 pub use macro_expander::MacroExpander;
 pub use learning::LearningStore;
 pub use agent::{Agent, AgentAction, Intent, ActionResult};
+pub use spell::{SpellCorrector, Correction, ErrorType};
