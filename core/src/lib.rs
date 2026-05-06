@@ -8,6 +8,8 @@ pub mod keystroke;
 pub mod buffer;
 pub mod candidate;
 pub mod langpack;
+pub mod config;
+pub mod macro_expander;
 
 // Core engine entry point
 pub use engine::{Engine, EngineEvent};
@@ -17,3 +19,5 @@ pub use keystroke::{Keystroke, Key, Modifiers};
 pub use buffer::Buffer;
 pub use candidate::{Candidate, CandidateList};
 pub use langpack::{LanguagePack, ProcessResult, DynLanguagePack};
+pub use config::Config;
+pub use macro_expander::MacroExpander;
