@@ -9,7 +9,6 @@ use std::collections::HashMap;
 pub struct MacroExpander {
     macros: HashMap<String, String>,
     enabled: bool,
-    trigger: char,
 }
 
 impl MacroExpander {
@@ -17,7 +16,6 @@ impl MacroExpander {
         let mut expander = Self {
             macros: HashMap::new(),
             enabled: false,
-            trigger: ' ',
         };
         expander.load_defaults();
         expander

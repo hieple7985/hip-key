@@ -48,14 +48,16 @@ impl Trie {
     }
 
     pub fn contains(&self, word: &str) -> bool {
-        self.get_node(word).map_or(false, |n| n.is_word)
+        self.get_node(word).is_some_and(|n| n.is_word)
     }
 
+    #[allow(dead_code)]
     pub fn get_frequency(&self, word: &str) -> u32 {
         self.get_node(word)
             .map_or(0, |n| if n.is_word { n.frequency } else { 0 })
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }

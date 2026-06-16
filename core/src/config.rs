@@ -119,9 +119,7 @@ impl Config {
     fn set_defaults_for_missing(&mut self) {
         let defaults = Self::new();
         for (key, value) in defaults.values {
-            if !self.values.contains_key(&key) {
-                self.values.insert(key, value);
-            }
+            self.values.entry(key).or_insert(value);
         }
     }
 

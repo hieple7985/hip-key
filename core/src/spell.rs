@@ -47,7 +47,7 @@ impl SpellCorrector {
     }
 
     pub fn is_correct(&self, word: &str) -> bool {
-        self.dictionary.iter().any(|d| *d == word)
+        self.dictionary.contains(&word)
     }
 
     pub fn corrections(&self, word: &str) -> Vec<Correction> {
@@ -370,7 +370,7 @@ mod tests {
     fn test_preserve_case() {
         let corrector = SpellCorrector::new();
         let corrections = corrector.corrections("XINH");
-        assert!(corrections.iter().any(|c| c.corrected == "SINH" || c.corrected == "SINH"));
+        assert!(corrections.iter().any(|c| c.corrected == "SINH"));
     }
 
     #[test]

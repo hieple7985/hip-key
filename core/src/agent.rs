@@ -250,10 +250,10 @@ impl AgentAction for CalcAction {
         let triggers = ["calc ", "tính ", "calculate "];
 
         for t in &triggers {
-            if lower.starts_with(t) {
+            if let Some(expr) = lower.strip_prefix(t) {
                 return Some(Intent {
                     action_name: self.name().to_string(),
-                    params: HashMap::from([("expr".to_string(), lower[t.len()..].to_string())]),
+                    params: HashMap::from([("expr".to_string(), expr.to_string())]),
                     raw_text: text.to_string(),
                     confidence: 0.95,
                 });
@@ -293,7 +293,7 @@ fn simple_calc(expr: &str) -> Result<String, ()> {
     let mut nums: Vec<f64> = vec![];
     let mut ops: Vec<char> = vec![];
 
-    for (_i, c) in chars.iter().enumerate() {
+    for c in chars.iter() {
         if c.is_ascii_digit() || *c == '.' {
             num_str.push(*c);
         } else if *c == '(' {
@@ -372,6 +372,7 @@ fn apply_op(left: f64, op: char, right: f64) -> f64 {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     struct TestAction(&'static str, &'static str);
 
     impl AgentAction for TestAction {

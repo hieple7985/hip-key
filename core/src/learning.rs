@@ -87,7 +87,7 @@ impl LearningStore {
 
     pub fn boost_candidates(
         &self,
-        candidates: &mut Vec<crate::Candidate>,
+        candidates: &mut [crate::Candidate],
     ) {
         if self.total_selections == 0 {
             return;

@@ -9,23 +9,19 @@ use hip_key_core::{Keystroke, LanguagePack, ProcessResult, CandidateList, Candid
 use dictionary::Dictionary;
 
 /// Vietnamese input method type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InputMethod {
     /// Telex input (e.g., aw -> ă, aa -> â)
+    #[default]
     Telex,
     /// VNI input (e.g., a8 -> ă, a6 -> â)
     VNI,
 }
 
-impl Default for InputMethod {
-    fn default() -> Self {
-        Self::Telex
-    }
-}
-
 /// Tone mark in Vietnamese
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum ToneMark {
+    #[default]
     None,       // no tone (a)
     Acute,      // sắc (á)
     Grave,      // huyền (à)
@@ -332,7 +328,7 @@ impl Vietnamese {
             if c == 'x' || c == 'z' {
                 // x/z removes tone if it comes after a vowel
                 // Check if the previous character (in chars) is a vowel
-                let prev_is_vowel = chars.last().map_or(false, |ch| ch.can_take_tone);
+                let prev_is_vowel = chars.last().is_some_and(|ch| ch.can_take_tone);
                 if prev_is_vowel {
                     pending_tone = Some(ToneMark::None);  // Remove tone
                     i += 1;

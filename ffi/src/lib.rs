@@ -3,6 +3,12 @@
 //! Provides a stable C API for platform adapters.
 //! All strings returned are heap-allocated and must be freed with hipkey_string_free().
 
+// FFI functions accept raw pointers by design. Every function null-checks its
+// pointer arguments before dereferencing, so the `not_unsafe_ptr_arg_deref`
+// lint is not actionable here (marking all of them `unsafe` would require all
+// C callers to wrap calls in `unsafe {}`, which is not idiomatic for C FFI).
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use hip_key_core::{
     Engine, EngineEvent, Key, Keystroke, LanguagePack, Modifiers,
 };
@@ -120,7 +126,7 @@ pub extern "C" fn hipkey_process_keystroke(
     }
     let state = unsafe { &mut *(engine as *mut EngineState) };
 
-    let key = if key_code >= 0x20 && key_code <= 0x7E {
+    let key = if (0x20..=0x7E).contains(&key_code) {
         Key::Char(key_code as u8 as char)
     } else {
         match key_code {
@@ -203,13 +209,9 @@ pub extern "C" fn hipkey_get_last_committed(engine: *mut HipKeyEngine) -> *mut c
     let state = unsafe { &*(engine as *const EngineState) };
     match &state.last_commit {
         Some(cstr) => {
-            let bytes = cstr.as_bytes_with_nul();
-            let dup = unsafe { libc::malloc(bytes.len()) as *mut c_char };
-            if dup.is_null() {
-                return ptr::null_mut();
-            }
-            unsafe { ptr::copy_nonoverlapping(bytes.as_ptr() as *mut c_char, dup, bytes.len()) };
-            dup
+            // Use Rust allocator (consistent with hipkey_string_free → CString::from_raw).
+            // cstr.to_bytes() has no interior nulls by CString invariant, so this always succeeds.
+            CString::new(cstr.to_bytes()).unwrap_or_default().into_raw()
         }
         None => ptr::null_mut(),
     }
@@ -299,6 +301,9 @@ pub extern "C" fn hipkey_string_free(s: *mut c_char) {
     }
 }
 
+// SAFETY: `s` must be NULL or a pointer previously returned by this crate's
+// allocation functions. The caller must not pass a dangling or foreign pointer.
+
 #[no_mangle]
 pub extern "C" fn hipkey_candidate_list_free(list: HipKeyCandidateList) {
     if list.candidates.is_null() || list.len == 0 {
@@ -312,8 +317,11 @@ pub extern "C" fn hipkey_candidate_list_free(list: HipKeyCandidateList) {
             }
         }
     }
-    let layout = std::alloc::Layout::array::<HipKeyCandidate>(list.len).unwrap();
-    unsafe { std::alloc::dealloc(list.candidates as *mut u8, layout) };
+    // Guard against panic crossing FFI boundary: Layout::array only fails on
+    // overflow, which would be UB anyway. Dealloc with matching layout or leak.
+    if let Ok(layout) = std::alloc::Layout::array::<HipKeyCandidate>(list.len) {
+        unsafe { std::alloc::dealloc(list.candidates as *mut u8, layout) };
+    }
 }
 
 #[no_mangle]
@@ -434,7 +442,7 @@ mod tests {
             HipKeyResult::InvalidArgument
         );
         assert_eq!(hipkey_clear(ptr::null_mut()), HipKeyResult::InvalidArgument);
-        assert_eq!(hipkey_is_composing(ptr::null_mut()), false);
+        assert!(!hipkey_is_composing(ptr::null_mut()));
         assert!(hipkey_get_composing_text(ptr::null_mut()).is_null());
         assert!(hipkey_get_committed_text(ptr::null_mut()).is_null());
     }
@@ -598,5 +606,36 @@ mod tests {
         hipkey_agent_action_result_free(result);
 
         hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_get_last_committed_after_explicit_commit() {
+        let engine = hipkey_engine_create();
+        hipkey_engine_set_language_pack_vi(engine, 0);
+
+        hipkey_process_keystroke(engine, 'x' as u32, false, false, false, false);
+        hipkey_process_keystroke(engine, 'i' as u32, false, false, false, false);
+        hipkey_process_keystroke(engine, 'n' as u32, false, false, false, false);
+        hipkey_commit(engine);
+
+        let ptr = hipkey_get_last_committed(engine);
+        assert!(!ptr.is_null());
+        let text = unsafe { CStr::from_ptr(ptr) };
+        assert_eq!(text.to_str().unwrap(), "xin");
+        hipkey_string_free(ptr);
+
+        hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_get_last_committed_none_initially() {
+        let engine = hipkey_engine_create();
+        assert!(hipkey_get_last_committed(engine).is_null());
+        hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_get_last_committed_null_safe() {
+        assert!(hipkey_get_last_committed(ptr::null_mut()).is_null());
     }
 }
