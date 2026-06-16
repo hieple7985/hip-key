@@ -1,0 +1,23 @@
+install_in_progress: false
+phase: complete
+last_updated: '2026-06-17'
+
+answers:
+  default_target: cli-local-and-ffi-local
+  personas:
+    - name: default_user
+      description: 'Any local user typing Vietnamese'
+  critical_flows:
+    - telex-typing
+    - vni-typing
+    - tone-marks
+    - backspace-commit
+    - candidate-selection
+    - method-switch
+    - agent-actions
+    - spell-correction
+  cleanup: auto
+  gh_action: required
+  failure_learning: suggest_in_report
+  imagemagick: true
+  macos_ime: yes
