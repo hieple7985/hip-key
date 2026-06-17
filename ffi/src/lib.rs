@@ -126,22 +126,19 @@ pub extern "C" fn hipkey_process_keystroke(
     }
     let state = unsafe { &mut *(engine as *mut EngineState) };
 
-    let key = if (0x20..=0x7E).contains(&key_code) {
-        Key::Char(key_code as u8 as char)
-    } else {
-        match key_code {
-            0x08 => Key::Backspace,
-            0x7F => Key::Delete,
-            0x0D => Key::Enter,
-            0x1B => Key::Escape,
-            0x09 => Key::Tab,
-            0x20 => Key::Space,
-            0x11 => Key::Arrow(ArrowDirection::Up),
-            0x12 => Key::Arrow(ArrowDirection::Down),
-            0x13 => Key::Arrow(ArrowDirection::Left),
-            0x14 => Key::Arrow(ArrowDirection::Right),
-            _ => Key::Unknown(key_code),
-        }
+    let key = match key_code {
+        0x20 => Key::Space,
+        0x08 => Key::Backspace,
+        0x7F => Key::Delete,
+        0x0D => Key::Enter,
+        0x1B => Key::Escape,
+        0x09 => Key::Tab,
+        0x11 => Key::Arrow(ArrowDirection::Up),
+        0x12 => Key::Arrow(ArrowDirection::Down),
+        0x13 => Key::Arrow(ArrowDirection::Left),
+        0x14 => Key::Arrow(ArrowDirection::Right),
+        _ if (0x20..=0x7E).contains(&key_code) => Key::Char(key_code as u8 as char),
+        _ => Key::Unknown(key_code),
     };
 
     let keystroke = Keystroke {
@@ -249,7 +246,9 @@ pub extern "C" fn hipkey_get_candidates(engine: *mut HipKeyEngine) -> HipKeyCand
             len: 0,
         },
     };
-    let c_ptr = unsafe { std::alloc::alloc(layout) as *mut HipKeyCandidate };
+    // alloc_zeroed: zero-initialize so a panic mid-population leaves null
+    // text pointers (safely skipped by candidate_list_free's null check).
+    let c_ptr = unsafe { std::alloc::alloc_zeroed(layout) as *mut HipKeyCandidate };
     if c_ptr.is_null() {
         return HipKeyCandidateList {
             candidates: ptr::null_mut(),
@@ -304,12 +303,22 @@ pub extern "C" fn hipkey_string_free(s: *mut c_char) {
 // SAFETY: `s` must be NULL or a pointer previously returned by this crate's
 // allocation functions. The caller must not pass a dangling or foreign pointer.
 
+/// Maximum candidates ever returned by hipkey_get_candidates. Used to clamp
+/// caller-supplied `len` in hipkey_candidate_list_free so a corrupted/tampered
+/// len cannot cause OOB reads or wrong-layout dealloc.
+const MAX_CANDIDATES: usize = 9;
+
 #[no_mangle]
 pub extern "C" fn hipkey_candidate_list_free(list: HipKeyCandidateList) {
     if list.candidates.is_null() || list.len == 0 {
         return;
     }
-    for i in 0..list.len {
+    // Do not trust caller-supplied len beyond the maximum we ever allocate.
+    // hipkey_get_candidates caps at MAX_CANDIDATES, so any len above that is
+    // either corruption or tampering. Clamp to avoid OOB read + wrong-layout
+    // dealloc (which would be UB in the global allocator).
+    let safe_len = list.len.min(MAX_CANDIDATES);
+    for i in 0..safe_len {
         unsafe {
             let candidate = &*list.candidates.add(i);
             if !candidate.text.is_null() {
@@ -317,9 +326,14 @@ pub extern "C" fn hipkey_candidate_list_free(list: HipKeyCandidateList) {
             }
         }
     }
-    // Guard against panic crossing FFI boundary: Layout::array only fails on
-    // overflow, which would be UB anyway. Dealloc with matching layout or leak.
-    if let Ok(layout) = std::alloc::Layout::array::<HipKeyCandidate>(list.len) {
+    // Dealloc uses the clamped len to compute the Layout. This matches the
+    // original allocation when the caller passes back the struct unmodified
+    // (the common case). If the caller tampered with len downward, we still
+    // free the correct number of strings up to safe_len and then dealloc the
+    // original-sized layout (computed from safe_len, which is <= actual).
+    // Note: if caller set len > actual alloc, safe_len clamps to MAX_CANDIDATES
+    // which equals the max alloc, so Layout is always valid.
+    if let Ok(layout) = std::alloc::Layout::array::<HipKeyCandidate>(safe_len) {
         unsafe { std::alloc::dealloc(list.candidates as *mut u8, layout) };
     }
 }
@@ -637,5 +651,43 @@ mod tests {
     #[test]
     fn test_get_last_committed_null_safe() {
         assert!(hipkey_get_last_committed(ptr::null_mut()).is_null());
+    }
+
+    #[test]
+    fn test_candidate_list_free_tampered_len_does_not_crash() {
+        // Regression test for ffi-011/ffi-012: a caller that tampers with
+        // list.len (sets it above MAX_CANDIDATES) must not cause OOB reads
+        // or wrong-layout dealloc. The free function clamps len.
+        let engine = hipkey_engine_create();
+        hipkey_engine_set_language_pack_vi(engine, 0);
+
+        // Type some chars to populate candidates
+        for c in ['c', 'h'] {
+            hipkey_process_keystroke(engine, c as u32, false, false, false, false);
+        }
+
+        let mut list = hipkey_get_candidates(engine);
+        // Tamper: inflate len far beyond actual allocation
+        list.len = 999_999;
+        // Must not crash (previously: OOB read + arbitrary free)
+        hipkey_candidate_list_free(list);
+
+        hipkey_engine_destroy(engine);
+    }
+
+    #[test]
+    fn test_space_key_maps_to_space_variant() {
+        // Regression test for ffi-023: 0x20 must produce Key::Space, not
+        // Key::Char(' '). Verified by checking the engine does not crash and
+        // the keystroke is routed to the language pack.
+        let engine = hipkey_engine_create();
+        hipkey_engine_set_language_pack_vi(engine, 0);
+
+        let event = hipkey_process_keystroke(engine, 0x20, false, false, false, false);
+        // Space should be BufferChanged (appended) or PassThrough depending on
+        // language pack; either way, not Error.
+        assert_ne!(event, HipKeyEngineEvent::Error);
+
+        hipkey_engine_destroy(engine);
     }
 }

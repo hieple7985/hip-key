@@ -16,3 +16,6 @@ authors = ["Hiệp"]
 
 [workspace.dependencies]
 criterion = "0.5"
+
+[profile.release]
+panic = "abort"
