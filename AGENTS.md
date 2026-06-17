@@ -108,3 +108,23 @@ See `docs/language-pack-guide.md`. Summary:
 - Do not introduce runtime dependencies into `core/` casually — discuss first.
 - Do not add comments that restate what the code obviously does.
 - Do not commit `target/`, `.claude/`, `.DS_Store`, or editor swap files (see `.gitignore`).
+
+## Issue & Pull Request Rules (mandatory)
+
+Every issue and PR created by an agent MUST:
+
+1. **Be assigned to `hieple7985`** (the repo owner). No unassigned issues or PRs.
+2. **Carry at least one label** from the priority ladder:
+   - `p0` — must have, blocks release
+   - `p1` — should have
+   - `p2` — nice to have
+   And at least one category label (e.g., `security`, `ffi`, `platform`, `documentation`, `enhancement`, `bug`, `config`, `ci`).
+3. Use the existing label set. If a needed label does not exist, create it before opening the issue/PR.
+
+Commands:
+```bash
+gh issue create --assignee hieple7985 --label "p0,security" --title "..." --body "..."
+gh pr create    --assignee hieple7985 --label "p0,ffi"      --title "..." --body "..."
+```
+
+Never open an issue or PR without an assignee and at least one label.
