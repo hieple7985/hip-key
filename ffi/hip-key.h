@@ -160,6 +160,47 @@ HipKeyResult hipkey_clear(HipKeyEngine* engine);
  */
 void hipkey_string_free(char* s);
 
+/* ========== Agent API ========== */
+
+typedef struct HipKeyActionResult {
+    bool success;
+    char* display_text;
+    char* commit_text;
+    bool should_commit;
+} HipKeyActionResult;
+
+/**
+ * Enable the agent (intent detection + action automation).
+ */
+HipKeyResult hipkey_agent_enable(HipKeyEngine* engine);
+
+/**
+ * Disable the agent.
+ */
+HipKeyResult hipkey_agent_disable(HipKeyEngine* engine);
+
+/**
+ * Check if the agent is enabled.
+ */
+bool hipkey_agent_is_enabled(HipKeyEngine* engine);
+
+/**
+ * Process text through the agent. Returns a HipKeyActionResult.
+ * The caller must free the result with hipkey_agent_action_result_free().
+ */
+HipKeyActionResult hipkey_agent_process(HipKeyEngine* engine, const char* text);
+
+/**
+ * Get the display_text pointer from a HipKeyActionResult.
+ * Does not transfer ownership; use hipkey_agent_action_result_free to free.
+ */
+char* hipkey_agent_action_result_display_text(HipKeyActionResult result);
+
+/**
+ * Free a HipKeyActionResult and its strings.
+ */
+void hipkey_agent_action_result_free(HipKeyActionResult result);
+
 #ifdef __cplusplus
 }
 #endif

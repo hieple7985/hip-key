@@ -96,13 +96,21 @@ impl Config {
 
     fn default_config_path() -> Option<PathBuf> {
         if cfg!(target_os = "macos") {
-            Some(PathBuf::from(
-                dirs_cache("macOS").unwrap_or_else(|| "~/Library/Application Support/hip-key/config.toml".to_string()),
-            ))
+            let home = std::env::var("HOME").ok()?;
+            Some(PathBuf::from(home).join("Library/Application Support/hip-key/config.toml"))
         } else if cfg!(target_os = "linux") {
-            Some(PathBuf::from("~/.config/hip-key/config.toml"))
+            let config_dir = std::env::var("XDG_CONFIG_HOME").ok();
+            let base = match config_dir {
+                Some(dir) if dir.starts_with('/') => PathBuf::from(dir),
+                _ => {
+                    let home = std::env::var("HOME").ok()?;
+                    PathBuf::from(home).join(".config")
+                }
+            };
+            Some(base.join("hip-key/config.toml"))
         } else if cfg!(target_os = "windows") {
-            Some(PathBuf::from("%APPDATA%\\hip-key\\config.toml"))
+            let appdata = std::env::var("APPDATA").ok()?;
+            Some(PathBuf::from(appdata).join("hip-key/config.toml"))
         } else {
             None
         }
@@ -172,10 +180,6 @@ fn format_value(v: &str) -> String {
     }
 }
 
-fn dirs_cache(_os: &str) -> Option<String> {
-    None
-}
-
 fn parse_config(content: &str) -> HashMap<String, String> {
     let mut map = HashMap::new();
     for line in content.lines() {
@@ -210,6 +214,17 @@ impl std::fmt::Display for ConfigError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_default_config_path_resolves_env() {
+        // Regression test for config-02: path must NOT contain literal ~ or %APPDATA%.
+        // On macOS/Linux, HOME must be expanded; on Windows, APPDATA.
+        if let Some(path) = Config::default_config_path() {
+            let path_str = path.to_string_lossy();
+            assert!(!path_str.contains('~'), "path must not contain literal ~: {}", path_str);
+            assert!(!path_str.contains("%APPDATA%"), "path must not contain literal %APPDATA%: {}", path_str);
+        }
+    }
 
     #[test]
     fn test_config_new() {
