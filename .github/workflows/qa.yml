@@ -1,0 +1,144 @@
+name: QA
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    # QA is REQUIRED for merge. Remove this comment if you want it optional.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install ImageMagick
+        run: sudo apt-get install -y -qq imagemagick
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install tuistory
+        run: npm install -g tuistory
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-qa-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-qa-
+
+      - name: Build CLI binary
+        run: cargo build --bin hip-key
+
+      - name: Build FFI library
+        run: cargo build -p hip-key-ffi
+
+      - name: Install droid CLI
+        run: curl -fsSL https://app.factory.ai/cli | sh
+
+      - name: Run QA
+        id: qa
+        continue-on-error: true
+        timeout-minutes: 20
+        env:
+          CI: 'true'
+        run: |
+          mkdir -p qa-results
+          droid exec --auto high "You are running in a non-interactive CI environment. There is NO human available.
+          Do NOT use AskUser, do NOT wait for confirmations, do NOT pause for input.
+          Run the qa skill. Analyze the git diff for this PR and run only the relevant app flows.
+          Write the final report to qa-results/report.md.
+          macOS IME tests will be BLOCKED because this runner is Linux; that is expected, not a failure."
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-results
+          path: qa-results/
+          retention-days: 14
+
+      - name: Post QA report as PR comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f qa-results/report.md ]; then
+            echo "<details><summary>QA output (raw)</summary>" > qa-results/report.md
+            echo "" >> qa-results/report.md
+            cat qa-output.txt 2>/dev/null >> qa-results/report.md || echo "_No output captured._" >> qa-results/report.md
+            echo "" >> qa-results/report.md
+            echo "</details>" >> qa-results/report.md
+          fi
+
+          # Ensure the report starts with ## QA Report
+          if ! head -1 qa-results/report.md | grep -q '^## QA Report'; then
+            printf '## QA Report\n\n' | cat - qa-results/report.md > tmp && mv tmp qa-results/report.md
+          fi
+
+          # Footer with artifact and run links
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "**Artifacts:** [Download](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) (retained 14 days)"
+            echo "**Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> qa-results/report.md
+
+          # Hidden marker for update detection
+          printf '<!-- qa-report -->\n\n' | cat - qa-results/report.md > tmp && mv tmp qa-results/report.md
+
+          # Find existing QA comment
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          EXISTING_COMMENT_ID=$(gh api \
+            "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq '[.[] | select(.body | startswith("<!-- qa-report -->")) | .id][0]' 2>/dev/null || echo "")
+
+          BODY=$(jq -Rs . < qa-results/report.md)
+
+          if [ -n "$EXISTING_COMMENT_ID" ]; then
+            # Update existing comment
+            echo "$BODY" | xargs -0 -I {} gh api \
+              --method PATCH \
+              "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -f body={} 2>/dev/null || true
+            echo "Updated existing QA comment $EXISTING_COMMENT_ID"
+          else
+            # Create new comment
+            echo "$BODY" | xargs -0 -I {} gh api \
+              --method POST \
+              "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              -f body={} 2>/dev/null || true
+            echo "Created new QA comment"
+          fi
+
+      - name: Fail job if QA step failed
+        if: steps.qa.outcome == 'failure'
+        run: |
+          echo "QA step failed. Failing the job to block merge (required check)."
+          exit 1

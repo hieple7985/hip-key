@@ -1,0 +1,69 @@
+project: hip-key
+imagemagick: true
+
+environments:
+  cli-local:
+    url: local
+    restrictions: []
+  ffi-local:
+    url: local
+    restrictions: []
+  macos-app:
+    url: local
+    restrictions: []
+
+default_target: cli-local
+
+auth:
+  method: none
+  provider: none
+
+personas:
+  - name: default_user
+    description: 'Any local user typing Vietnamese into hip-key'
+    credentials_source: none
+    test_focus: ['telex', 'vni', 'tone-marks', 'candidates', 'backspace', 'method-switch']
+    cannot_do: []
+
+apps:
+  cli:
+    path_patterns:
+      - 'cli/**'
+      - 'core/src/engine.rs'
+      - 'core/src/buffer.rs'
+      - 'core/src/langpack.rs'
+      - 'core/src/keystroke.rs'
+      - 'core/src/candidate.rs'
+    skill: qa-cli
+    test_tool: tuistory
+    build_command: 'cargo build --bin hip-key'
+
+  ffi:
+    path_patterns:
+      - 'ffi/**'
+      - 'core/src/engine.rs'
+    skill: qa-ffi
+    test_tool: cargo-test
+    build_command: 'cargo build -p hip-key-ffi'
+
+  macos:
+    path_patterns:
+      - 'platform/macos/**'
+      - 'ffi/**'
+    skill: qa-macos
+    test_tool: manual
+    build_command: 'bash platform/macos/build-ffi.sh'
+
+feature_flags:
+  provider: none
+  dashboard_url: null
+  how_to_override: 'n/a'
+
+integrations: {}
+
+cleanup:
+  auto_cleanup: true
+  strategy: auto
+  instructions: 'Engine instances in FFI tests are stack/Box-allocated and auto-dropped. cargo test cleans up automatically. CLI is read-only.'
+
+failure_learning: suggest_in_report
